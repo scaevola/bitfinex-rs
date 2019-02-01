@@ -1,7 +1,7 @@
 use errors::*;
 use reqwest;
 use reqwest::{StatusCode, Response};
-use reqwest::header::{Headers, UserAgent, ContentType};
+use reqwest::header::{HeaderMap,HeaderName, HeaderValue};
 use std::io::Read;
 use ring::{digest, hmac};
 use hex::encode as hex_encode;
@@ -47,21 +47,21 @@ impl Client {
         self.handler(response)            
     } 
 
-    fn build_headers(&self, request: String, payload: String) -> Result<Headers> {
+    fn build_headers(&self, request: String, payload: String) -> Result<HeaderMap> {
         let nonce: String = self.generate_nonce()?;
         let signature_path: String = format!("{}{}{}{}", API_SIGNATURE_PATH, request, nonce, payload);
 
         let signed_key = hmac::SigningKey::new(&digest::SHA384, self.secret_key.as_bytes());
         let signature = hex_encode(hmac::sign(&signed_key, signature_path.as_bytes()).as_ref());
 
-        let mut custon_headers = Headers::new();  
-        custon_headers.set(UserAgent::new("bitfinex-rs"));
-        custon_headers.set_raw("bfx-nonce", nonce.as_str());
-        custon_headers.set_raw("bfx-apikey", self.api_key.as_str());
-        custon_headers.set_raw("bfx-signature", signature.as_str());
-        custon_headers.set(ContentType::json());
+        let mut custom_headers = HeaderMap::new();  
+        custom_headers.insert(HeaderName::from_static("User-Agent"), HeaderValue::from_static("bitfinex-rs"));
+        custom_headers.insert(HeaderName::from_static("bfx-nonce"), HeaderValue::from_str(nonce.as_str()).unwrap());
+        custom_headers.insert(HeaderName::from_static("bfx-apikey"), HeaderValue::from_str(self.api_key.as_str()).unwrap());
+        custom_headers.insert(HeaderName::from_static("bfx-signature"), HeaderValue::from_str(signature.as_str()).unwrap());
+        custom_headers.insert(HeaderName::from_static("Content-Type"),HeaderValue::from_static("application/json"));
 
-        Ok(custon_headers)
+        Ok(custom_headers)
     } 
 
     fn generate_nonce(&self) -> Result<String> {
@@ -75,21 +75,21 @@ impl Client {
 
     fn handler(&self, mut response: Response) -> Result<(String)> {
         match response.status() {
-            StatusCode::Ok => {
+            StatusCode::OK => {
                 let mut body = String::new();
                 response.read_to_string(&mut body)?;
                 return Ok(body);
             },
-            StatusCode::InternalServerError => {
+            StatusCode::INTERNAL_SERVER_ERROR => {
                 bail!("Internal Server Error");
             }
-            StatusCode::ServiceUnavailable => {
+            StatusCode::SERVICE_UNAVAILABLE => {
                 bail!("Service Unavailable");
             }
-            StatusCode::Unauthorized => {
+            StatusCode::UNAUTHORIZED => {
                 bail!("Unauthorized");
             }            
-            StatusCode::BadRequest => {
+            StatusCode::BAD_REQUEST => {
                 bail!(format!("Bad Request: {:?}", response));
             }                        
             s => {
